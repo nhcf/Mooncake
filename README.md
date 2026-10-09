@@ -24,6 +24,7 @@
 | [NH-0005](#nh-0005) / [#3479](https://github.com/kvcache-ai/Mooncake/pull/3479) | 跨轮尾批只装载一次，并对新输入去重 | 同key重复入桶，触发`OBJECT_ALREADY_EXISTS`和整批失败 |
 | [NH-0006](#nh-0006) / [#3246](https://github.com/kvcache-ai/Mooncake/pull/3246) | 文件回读缓冲注册远端访问权限与rkey | 远端RDMA READ缺少访问密钥，传输失败 |
 | [NH-0007](#nh-0007) / [#3073](https://github.com/kvcache-ai/Mooncake/pull/3073) | 按操作ID接收完成事件，检查实际读取字节数 | io_uring短读被误判成功，返回错误数据 |
+| [NH-0008](#nh-0008) / [#3488](https://github.com/kvcache-ai/Mooncake/pull/3488) | 同bucket多key批量提交io_uring读取 | 逐key提交并等待，放大回读开销 |
 
 ## 构建方法
 
@@ -214,6 +215,25 @@ auto error_code = client_->RegisterLocalMemory(
 修改 `mooncake-store/src/uring_file.cpp` 和 `storage_backend.cpp`。每次操作分配单调 `op_id`，仅接收属于该操作的完成事件；按实际读取字节数检查短读，并在检查通过后调整数据指针。
 
 回移保持旧版文件读接口，修复范围为 io_uring 文件路径。历史记录支持顺序应用与代码核对；短读注入尚未专项验证。后续批量读取优化依赖本项正确性修复。
+
+<a id="nh-0008"></a>
+
+### NH-0008：同 bucket 批量提交 io_uring 读取
+
+在 NH-0007 基础上，将同 bucket 的多 key 读取组装成 `ReadDesc`，按队列深度批量提交并收集完成事件。修改 `file_interface.h`、`storage_backend.cpp`、`uring_file.cpp`，新增 `uring_submit.h`。
+
+```cpp
+// mooncake-store/src/storage_backend.cpp；省略日志与外围逻辑。
+if (!desc.completed) {
+    return tl::make_unexpected(ErrorCode::FILE_READ_FAIL);
+}
+if (desc.bytes_read < batch_plan.min_required) {
+    // min_required 包含对齐偏移和目标数据长度。
+    return tl::make_unexpected(ErrorCode::FILE_READ_FAIL);
+}
+```
+
+每 key 使用覆盖完整对齐范围的 SQE，并保留逐对象完成状态与字节数检查。上游 bench/test 依赖较新的 OffsetAllocator 配置，本回移仅纳入生产代码。尚无完整前后性能对照，不将提交次数减少写成实测加速收益。
 
 ## 发布记录与运行限制
 
