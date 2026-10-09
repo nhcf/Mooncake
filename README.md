@@ -23,6 +23,7 @@
 | [NH-0004](#nh-0004) / [#2077](https://github.com/kvcache-ai/Mooncake/pull/2077) | master重启后重挂segment并重新上报文件副本 | 文件仍在GPFS，master却丢失对象位置 |
 | [NH-0005](#nh-0005) / [#3479](https://github.com/kvcache-ai/Mooncake/pull/3479) | 跨轮尾批只装载一次，并对新输入去重 | 同key重复入桶，触发`OBJECT_ALREADY_EXISTS`和整批失败 |
 | [NH-0006](#nh-0006) / [#3246](https://github.com/kvcache-ai/Mooncake/pull/3246) | 文件回读缓冲注册远端访问权限与rkey | 远端RDMA READ缺少访问密钥，传输失败 |
+| [NH-0007](#nh-0007) / [#3073](https://github.com/kvcache-ai/Mooncake/pull/3073) | 按操作ID接收完成事件，检查实际读取字节数 | io_uring短读被误判成功，返回错误数据 |
 
 ## 构建方法
 
@@ -205,6 +206,14 @@ auto error_code = client_->RegisterLocalMemory(
 ```
 
 #3246修复原路径的`No rkey for MR access`条件。现有字节校验通过，但未用传输计数器排除TCP fallback，不能据此认定所有回读均走RDMA READ。
+
+<a id="nh-0007"></a>
+
+### NH-0007：修复 io_uring 完成事件与短读处理
+
+修改 `mooncake-store/src/uring_file.cpp` 和 `storage_backend.cpp`。每次操作分配单调 `op_id`，仅接收属于该操作的完成事件；按实际读取字节数检查短读，并在检查通过后调整数据指针。
+
+回移保持旧版文件读接口，修复范围为 io_uring 文件路径。历史记录支持顺序应用与代码核对；短读注入尚未专项验证。后续批量读取优化依赖本项正确性修复。
 
 ## 发布记录与运行限制
 
