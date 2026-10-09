@@ -22,6 +22,7 @@
 | [NH-0003](#nh-0003) / [#2818](https://github.com/kvcache-ai/Mooncake/pull/2818) | 本地bucket索引提交后再发布文件副本 | master已公布副本，Store尚不可读，Get返回`INVALID_KEY` |
 | [NH-0004](#nh-0004) / [#2077](https://github.com/kvcache-ai/Mooncake/pull/2077) | master重启后重挂segment并重新上报文件副本 | 文件仍在GPFS，master却丢失对象位置 |
 | [NH-0005](#nh-0005) / [#3479](https://github.com/kvcache-ai/Mooncake/pull/3479) | 跨轮尾批只装载一次，并对新输入去重 | 同key重复入桶，触发`OBJECT_ALREADY_EXISTS`和整批失败 |
+| [NH-0006](#nh-0006) / [#3246](https://github.com/kvcache-ai/Mooncake/pull/3246) | 文件回读缓冲注册远端访问权限与rkey | 远端RDMA READ缺少访问密钥，传输失败 |
 
 ## 构建方法
 
@@ -189,6 +190,21 @@ if (carryover_objects.find(it->first) != carryover_objects.end()) {
 ```
 
 补丁消除该重复分桶来源。更广的重复卸载幂等处理依赖后续状态机，未随本补丁引入。
+
+<a id="nh-0006"></a>
+
+### NH-0006：注册回读缓冲的远端访问权限
+
+仅有文件副本时，Store先读GPFS到本地工作区，再向Client提供数据。远端RDMA READ要求该工作区发布rkey。
+
+```cpp
+// mooncake-store/src/file_storage.cpp，RegisterLocalMemory；参数修改摘录。
+auto error_code = client_->RegisterLocalMemory(
+    client_buffer_allocator_->getBase(), config_.local_buffer_size,
+    kWildcardLocation, true, true);  // 原为false,false；允许远端访问并更新注册元数据。
+```
+
+#3246修复原路径的`No rkey for MR access`条件。现有字节校验通过，但未用传输计数器排除TCP fallback，不能据此认定所有回读均走RDMA READ。
 
 ## 发布记录与运行限制
 
