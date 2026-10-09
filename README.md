@@ -18,6 +18,7 @@
 | 编号 / 上游 PR | 修改动作 | 未修改的影响 |
 | --- | --- | --- |
 | [NH-0001](#nh-0001) / [#1734](https://github.com/kvcache-ai/Mooncake/pull/1734) | 阻塞文件回读投递到工作线程 | 慢回读占满RPC线程，拖延心跳与新请求 |
+| [NH-0002](#nh-0002) / [#2165](https://github.com/kvcache-ai/Mooncake/pull/2165) | 单对象回读上限由4 MiB断言改为实际缓冲容量检查 | 大对象回读触发断言，Store退出 |
 
 ## 构建方法
 
@@ -109,6 +110,26 @@ auto try_result = co_await coro_io::post([this, s]() {
 本地按#1734语义适配0.3.10函数上下文，保留RPC请求与响应类型。异步等待期间继续持有调用数据与必要资源，避免提前销毁缓冲或锁。
 
 目标是让RPC线程继续处理心跳。持续回读与心跳压力尚未形成独立A/B结果。
+
+<a id="nh-0002"></a>
+
+### NH-0002：允许大对象文件回读
+
+[Issue #2156](https://github.com/kvcache-ai/Mooncake/issues/2156)对应`FileStorage::AllocateBatch`的错误断言。历史DSV4测试回读20 MiB C128 state时，原版因超过4 MiB退出。
+
+```cpp
+// mooncake-store/src/file_storage.cpp，AllocateBatch；补丁核心摘录。
+if (keys.size() != sizes.size()) {
+    return tl::make_unexpected(ErrorCode::INVALID_PARAMS);
+}
+// ...逐对象检查，替代assert(sizes[i] <= kMaxSliceSize)。
+if (sizes[i] < 0 || sizes[i] > config_.local_buffer_size) {
+    // ...记录非法大小。
+    return tl::make_unexpected(ErrorCode::INVALID_PARAMS);
+}
+```
+
+上限对应单对象，并允许大小为0。该检查没有实现整批按字节切分、全局在途限额或等待空闲工作区；多个合法对象合计仍可触发`BUFFER_OVERFLOW`。
 
 ## 发布记录与运行限制
 
