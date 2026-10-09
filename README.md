@@ -21,6 +21,7 @@
 | [NH-0002](#nh-0002) / [#2165](https://github.com/kvcache-ai/Mooncake/pull/2165) | 单对象回读上限由4 MiB断言改为实际缓冲容量检查 | 大对象回读触发断言，Store退出 |
 | [NH-0003](#nh-0003) / [#2818](https://github.com/kvcache-ai/Mooncake/pull/2818) | 本地bucket索引提交后再发布文件副本 | master已公布副本，Store尚不可读，Get返回`INVALID_KEY` |
 | [NH-0004](#nh-0004) / [#2077](https://github.com/kvcache-ai/Mooncake/pull/2077) | master重启后重挂segment并重新上报文件副本 | 文件仍在GPFS，master却丢失对象位置 |
+| [NH-0005](#nh-0005) / [#3479](https://github.com/kvcache-ai/Mooncake/pull/3479) | 跨轮尾批只装载一次，并对新输入去重 | 同key重复入桶，触发`OBJECT_ALREADY_EXISTS`和整批失败 |
 
 ## 构建方法
 
@@ -169,6 +170,25 @@ auto add_object_result = client_->NotifyOffloadSuccess(keys, metadatas);
 适配还涉及`client_service.cpp`、`real_client.cpp`及Transfer Engine元数据接口。在`P2PHANDSHAKE`模式下，新增TE元数据发布接口为空操作，保留该模式的原有寻址方式。
 
 历史P5测试只重启master进程，Store进程保持运行。188个对象重新注册，失败数0，后续新Put/Get恢复。故障前指定file-only key的逐字节回读、Pod重建及HA切换需分别验证。
+
+<a id="nh-0005"></a>
+
+### NH-0005：跨轮尾批去重
+
+未达到封桶条件的对象会保留到下一轮。旧实现重复装载尾批，且没有排除本轮输入中的同key。
+
+```cpp
+// mooncake-store/src/storage_backend.cpp，GroupOffloadingKeysByBucket；核心摘录。
+auto carryover_objects = std::move(ungrouped_offloading_objects);
+bool carryover_loaded = false;  // 尾批每轮只装载一次。
+// ...本轮输入遍历中跳过已由尾批装载的对象。
+if (carryover_objects.find(it->first) != carryover_objects.end()) {
+    ++it;
+    continue;
+}
+```
+
+补丁消除该重复分桶来源。更广的重复卸载幂等处理依赖后续状态机，未随本补丁引入。
 
 ## 发布记录与运行限制
 
