@@ -20,6 +20,7 @@
 | [NH-0001](#nh-0001) / [#1734](https://github.com/kvcache-ai/Mooncake/pull/1734) | 阻塞文件回读投递到工作线程 | 慢回读占满RPC线程，拖延心跳与新请求 |
 | [NH-0002](#nh-0002) / [#2165](https://github.com/kvcache-ai/Mooncake/pull/2165) | 单对象回读上限由4 MiB断言改为实际缓冲容量检查 | 大对象回读触发断言，Store退出 |
 | [NH-0003](#nh-0003) / [#2818](https://github.com/kvcache-ai/Mooncake/pull/2818) | 本地bucket索引提交后再发布文件副本 | master已公布副本，Store尚不可读，Get返回`INVALID_KEY` |
+| [NH-0004](#nh-0004) / [#2077](https://github.com/kvcache-ai/Mooncake/pull/2077) | master重启后重挂segment并重新上报文件副本 | 文件仍在GPFS，master却丢失对象位置 |
 
 ## 构建方法
 
@@ -149,6 +150,25 @@ BucketStorageBackend卸载流程归纳：
 ```
 
 旧流程在提交索引前发布副本，Get可在两步之间到达。本补丁建立“master可见前，Store已可读”的顺序，并处理发布失败后的回滚。常规回读已通过；竞态放大和发布失败注入未专项验证。
+
+<a id="nh-0004"></a>
+
+### NH-0004：master重启后重报文件副本
+
+master内存元数据丢失后，Store心跳可收到`SEGMENT_NOT_FOUND`。补丁重新挂载内存与文件segment、扫描bucket元数据，并将现存对象重新报告给master。
+
+```cpp
+// mooncake-store/src/file_storage.cpp；扫描后的注册摘录。
+for (auto& metadata : metadatas) {
+    metadata.transport_endpoint = local_rpc_addr_;  // 副本由当前Store提供回读。
+}
+auto add_object_result = client_->NotifyOffloadSuccess(keys, metadatas);
+// 失败由后台任务重试；扫描时重置迭代状态。
+```
+
+适配还涉及`client_service.cpp`、`real_client.cpp`及Transfer Engine元数据接口。在`P2PHANDSHAKE`模式下，新增TE元数据发布接口为空操作，保留该模式的原有寻址方式。
+
+历史P5测试只重启master进程，Store进程保持运行。188个对象重新注册，失败数0，后续新Put/Get恢复。故障前指定file-only key的逐字节回读、Pod重建及HA切换需分别验证。
 
 ## 发布记录与运行限制
 
