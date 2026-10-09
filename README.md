@@ -1,19 +1,41 @@
-# Mooncake nhinfer
+<div align="center">
+  <img src=image/mooncake-icon.png width=44% />
+  <h2 align="center">
+      A KVCache-centric Disaggregated Architecture for LLM Serving
+  </h2>
+  <a href="https://www.usenix.org/system/files/fast25-qin.pdf" target="_blank"><strong>Paper</strong></a>
+  | <a href="https://www.usenix.org/system/files/fast25_slides-qin.pdf" target="_blank"><strong>Slides</strong></a>
+  | <a href="FAST25-release/traces" target="_blank"><strong>Traces</strong></a>
+  | <a href="https://arxiv.org/abs/2407.00079" target="_blank"><strong>Technical Report</strong></a>
+  | <a href="https://kvcache-ai.github.io/Mooncake/" target="_blank"><strong>Blog</strong></a>
+  | <a href="https://join.slack.com/t/mooncake-project/shared_invite/zt-3qx4x35ea-zSSTqTHItHJs9SCoXLOSPA" target="_blank"><strong>Slack</strong></a>
+  <br />
+  <br />
+</div>
+<br/>
 
-本分支在官方 `v0.3.10.post2` 上维护内部修复，提供 CPU master/Store 镜像构建入口。修复直接提交到源码，Dockerfile 编译当前检出的提交，不再下载官方源码后应用外部 patch。
+# Mooncake NanHuInfer
+
+本分支基于官方 `v0.3.10.post2` 持续维护，为 `HiCache + Mooncake + GPFS` 多级缓存方案 提供 Mooncake 修复版本和 CPU master/Store 镜像构建入口。
+
+该方案通过共享 L3 缓存复用模型实例的前缀 KV，减少重复计算。L3 使用 Mooncake Store 内存保存热数据，并将缓存卸载到 GPFS 扩展容量。
+
+本分支集中维护各模型服务在该场景下测试发现的问题修复。每项修复以独立 commit 保存，Dockerfile 直接编译当前源码，使镜像中的修改可追溯。
+
+本分支的官方基线版本与 xSGLang 镜像内的 Mooncake 版本保持一致。当前基线对齐 V5000 厂商提供的 `10.200.53.208/model_test/xsglang:v0.5.10-v4-rc1` 镜像。
 
 | 项目 | 值 |
 | --- | --- |
 | 维护仓库 | `https://github.com/nhcf/Mooncake` |
 | 维护分支 | `v0.3.10.post2-nhinfer-fix` |
-| 官方基线 | `v0.3.10.post2`，`e1d6d6f6f49fbbd77b7ee6e5d0c77349f341b3e3` |
+| 官方基线 | [v0.3.10.post2](https://github.com/kvcache-ai/Mooncake/tree/v0.3.10.post2)，[e1d6d6f6f49fbbd77b7ee6e5d0c77349f341b3e3](https://github.com/kvcache-ai/Mooncake/commit/e1d6d6f6f49fbbd77b7ee6e5d0c77349f341b3e3) |
 | 构建入口 | [docker/mooncake-nhinfer.Dockerfile](docker/mooncake-nhinfer.Dockerfile) |
 | 运行能力 | non-CUDA、HTTP、etcd、Store etcd；Linux amd64、Python 3.10 |
-| 当前状态 | 本地源码维护；尚未通过此入口完成新镜像构建与运行验收，尚未发布 |
+| 当前状态 | 已完成本地构建、静态检查及CPU行为验证；目标环境验收未完成，尚未发布 |
 
 ## 修改总览
 
-编号标识源码修复或优化。构建、文档准备提交不编号。每个修复 commit 标题包含对应的 `[NH-0001]`，并同步更新此表和逐项说明；编号不重排、不复用。
+编号标识源码修复或优化。每个修复 commit 标题包含对应的 `[NH-0001]`，并同步更新此表和逐项说明；编号不重排、不复用。
 
 | 编号 / 上游 PR | 修改动作 | 未修改的影响 |
 | --- | --- | --- |
@@ -28,76 +50,68 @@
 
 ## 构建方法
 
-在普通 Git clone 的根目录构建，要求 `.git` 为目录且工作区干净。Dockerfile 使用 Git 元数据检查 `SOURCE_COMMIT`，旧版 `dependencies.sh` 也需要 Git 初始化子模块，因此不支持直接使用 GitHub 源码压缩包或关联 worktree。Git 元数据只存在于构建阶段，最终镜像仅复制 wheel 和源码身份记录。
-
-首次准备子模块需要访问其 Git 源；构建还需要 Ubuntu、pip、Go 和其他依赖下载通道。建议使用专用干净 clone，避免把本地忽略文件或编译残留带入上下文。
-
-以下命令在已检出目标提交的仓库根目录执行，只构建本地镜像。基础镜像默认 tag 可变；正式发布前将 `BASE_IMAGE` 替换为已核验的 `ubuntu:22.04@sha256:...`。
+在本仓库根目录执行以下命令，构建当前提交的 CPU master/Store 镜像。需要 Docker 和依赖下载网络；源码修改应先提交，因为 Dockerfile 会检查工作区是否干净。构建前将 `{n}` 替换为本次镜像版本号，例如 `1`、`2`。
 
 ```bash
-set -euo pipefail
-git submodule update --init --recursive
-test -z "$(git status --porcelain --untracked-files=normal)"
-source_commit=$(git rev-parse HEAD)
-source_short=$(git rev-parse --short=12 HEAD)
-package_version="0.3.10.post2+nhinfer.g${source_short}"
-image_tag="local/mooncake:0.3.10.post2-nhinfer-g${source_short}"
-base_image="${BASE_IMAGE:-ubuntu:22.04}"
-# 日志写到仓库外，避免污染构建上下文。
-result_dir=$(mktemp -d /tmp/mooncake-nhinfer-build-XXXXXX)
-set +e
-docker build --platform linux/amd64 \
-  --build-arg "SOURCE_COMMIT=${source_commit}" \
-  --build-arg "PACKAGE_VERSION=${package_version}" \
-  --build-arg "BASE_IMAGE=${base_image}" \
-  --build-arg BUILD_JOBS=8 \
-  -f docker/mooncake-nhinfer.Dockerfile \
-  -t "$image_tag" . >"$result_dir/build.log" 2>&1
-build_rc=$?
-set -e
-printf '%s\n' "$build_rc" >"$result_dir/build.exit-code"
-printf 'results=%s\n' "$result_dir"
-if [ "$build_rc" -ne 0 ]; then
-  tail -n 80 "$result_dir/build.log"
-  exit "$build_rc"
-fi
-docker image inspect "$image_tag" >"$result_dir/image-identity.json"
+git switch v0.3.10.post2-nhinfer-fix
+image_tag=local/mooncake:0.3.10.post2-cpu-nhinfer-fix.{n}
+
+docker build -f docker/mooncake-nhinfer.Dockerfile \
+  -t "$image_tag" .
 ```
 
-| 构建参数 | 默认值或要求 | 用途 |
-| --- | --- | --- |
-| `SOURCE_COMMIT` | 必填，完整 Git commit | 必须等于构建上下文的 HEAD，写入 OCI revision |
-| `PACKAGE_VERSION` | 必填，`0.3.10.post2+nhinfer.<后缀>` | 区分官方包及内部源码版本；本地构建使用 `g<12位commit>` 后缀 |
-| `BASE_IMAGE` | `ubuntu:22.04` | 构建与运行阶段使用同一基底；发布时固定 digest |
-| `BUILD_JOBS` | `8` | CMake 并行编译数 |
-| `UBUNTU_MIRROR` | `https://mirrors.aliyun.com/ubuntu` | apt 源 |
-| `PIP_INDEX_URL` | `https://mirrors.aliyun.com/pypi/simple/` | pip 源 |
-| `GITHUB_BASE` | `https://github.com/` | 容器内 Git URL 改写及依赖脚本代理前缀；不改变宿主机 Git 配置 |
+成功后，镜像保存在本地。构建日志直接显示在终端，该命令不推送镜像或部署服务。
 
-保留的 CMake 选项为 `USE_HTTP=ON`、`USE_ETCD=ON`、`USE_CUDA=OFF`、`WITH_EP=OFF`、`STORE_USE_ETCD=ON`、`BUILD_UNIT_TESTS=OFF`。包名为 `mooncake-transfer-engine-non-cuda`，包解包到 `/opt/mooncake`，master/client 位于 `/opt/mooncake/mooncake`。基础镜像及 apt/pip 等依赖尚未全部锁定，不承诺逐字节复现。
+构建默认使用华为云 apt 源、阿里云 pip 源和 Go 官方模块代理。基础镜像先通过 HTTP 源安装 CA 证书，再使用 HTTPS 源安装其余依赖；apt 签名校验保持开启。系统依赖和 Go 工具链安装层可在后续源码修改时复用，Go 模块和 Go 编译结果也保存在构建缓存中。首次构建仍需下载并安装完整依赖。
+
+Dockerfile 自动读取当前 Git commit，并生成 Python 包版本 `0.3.10.post2+nhinfer.g<commit前12位>`，统一记录到镜像内的 `/opt/mooncake-build/SOURCE`。镜像 tag 中的 `{n}` 由构建者指定，不影响上述源码和包版本。
+
+使用普通 Git clone，保留 `.git` 目录；当前入口不支持源码压缩包或关联 worktree。子模块由容器内的 `dependencies.sh` 自动初始化，无需在宿主机单独执行。建议使用无编译残留的工作目录。
+
+### 可选参数
+
+默认使用 Ubuntu 22.04、8 个编译任务。需要调整时，在 `docker build` 中追加 `--build-arg 参数=值`。
+
+| 参数 | 默认值 | 用途 |
+| --- | --- | --- |
+| `BASE_IMAGE` | `ubuntu:22.04` | 构建和运行阶段的基础镜像 |
+| `BUILD_JOBS` | `8` | 并行编译数；内存不足时调小 |
+| `UBUNTU_MIRROR` | `https://repo.huaweicloud.com/ubuntu` | apt 源 |
+| `UBUNTU_BOOTSTRAP_MIRROR` | `http://archive.ubuntu.com/ubuntu` | 首次安装 CA 证书的 apt 源 |
+| `PIP_INDEX_URL` | `https://mirrors.aliyun.com/pypi/simple/` | pip 源 |
+| `GO_DOWNLOAD_BASE` | `https://go.dev/dl` | Go 工具链下载入口，版本跟随官方依赖脚本 |
+| `GOPROXY` | `https://proxy.golang.org,direct` | Go 模块下载代理 |
+| `GITHUB_BASE` | `https://github.com/` | 容器内 Git URL 改写和依赖下载代理；不改变宿主机配置 |
+
+编译开启 HTTP、etcd 和 Store etcd，关闭 CUDA、EP 和单元测试。Python 包名为 `mooncake-transfer-engine-non-cuda`，安装内容位于 `/opt/mooncake`，master/client 已加入镜像的 `PATH`。
 
 ## 镜像检查与源码身份
 
-Dockerfile 检查包版本、Store import、ELF 依赖闭合与非 CUDA 依赖要求，以及 master CLI。构建不执行单元测试，也不验证真实 GPFS、RDMA、恢复和 HA 路径。无需独立验证脚本。
+Dockerfile 在构建时检查包版本、Store import、动态库依赖和 master CLI。构建成功表示这些检查通过，真实 GPFS、RDMA、恢复和 HA 路径仍需另行验证。
 
-构建记录写入 `/opt/mooncake-build/SOURCE`，包含官方基线、实际 commit、包版本、内部提交标题及子模块提交。NH 编号可从内部修复提交标题追溯。完整 commit 同时覆盖不编号的构建和文档变更。
-
-构建完成后，在上述 Shell 中手动核对：
+需要查看版本时，在构建使用的 Shell 中执行：
 
 ```bash
-test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$image_tag")" = "$source_commit"
+# 镜像内记录官方基线、实际 commit、包版本、内部提交和子模块版本。
 docker run --rm "$image_tag" cat /opt/mooncake-build/SOURCE
-docker run --rm "$image_tag" python3 -c \
-  'from mooncake.store import MooncakeDistributedStore; import importlib.metadata; print(importlib.metadata.version("mooncake-transfer-engine-non-cuda"))'
-docker run --rm "$image_tag" mooncake_master --version
-docker image inspect --format 'image_id={{.Id}} repo_digests={{json .RepoDigests}}' "$image_tag"
+# 查看镜像 ID。
+docker image inspect --format 'image_id={{.Id}}' "$image_tag"
 ```
 
-本地未推送镜像可能没有 RepoDigest；image ID 与 RepoDigest 分开记录。
+NH 编号从修复提交标题追溯；完整 commit 同时覆盖构建和文档变更。最终运行镜像不包含源码和 Git 元数据。
+
+### 本地验证记录（2026-10-09）
+
+使用干净源码副本（commit `a6c1ef771eaa5e49e9281fa65f6ecf971b7c340d`）和外部指定的当前 Dockerfile 完成构建，未传入源码或包版本参数。生成包版本为 `0.3.10.post2+nhinfer.ga6c1ef771eaa`，镜像 ID 为 `sha256:1f69b8110fdbbd3c23e6635674c57dc848ad3dcaf8a2d9f525b0cade48525522`。包版本、Store 导入、动态库依赖和 master CLI 检查通过；Dockerfile 的 SHA256 为 `9e9be1479b7e59b0e4f041ec614d46352d70146f4e4d680107546e6534a75387`。
+
+前一轮相同源码构建已通过 TCP put/get（1 B至20 MiB）及本地文件 io_uring 回读（4 KiB、5 MiB、20 MiB）测试。简化命令后未重跑这些行为测试；新镜像的17个ELF文件与前一轮及原镜像 `10.200.53.208/model_test/mooncake:0.3.10.post2-cpu-nhinfer-fix.1`（image ID：`sha256:d298164d5bd71e1e10be308d7afa64aa8ea72931bb0bb2fb256bfb7d00824d6a`）逐字节一致。包版本及部分系统包版本存在差异，整个镜像并非逐字节一致。
+
+本轮未执行真实 RDMA、GPFS、P/D 集成、master 重启恢复、带KV的HA及性能测试。提交当前文档和Dockerfile后，构建会自动使用新的commit和包版本；上述镜像仍对应所记录的测试输入。
+
 
 ## 逐项说明
 
-以下代码路径相对本仓库。历史实验结论来自原镜像工程，不是本分支新镜像的验收结果。本次导入仅验证 patch 可应用及源码一致性，功能和性能验证仍需在目标环境执行。
+以下代码路径相对本仓库。逐项历史实验结论来自原镜像工程；本分支的本地验证范围见上节，目标环境功能和性能验收仍需另行执行。
 
 <a id="nh-0001"></a>
 
@@ -239,6 +253,8 @@ if (desc.bytes_read < batch_plan.min_required) {
 
 本分支尚未发布新镜像或发布 tag。正式发布可使用 `v0.3.10.post2-nhinfer-fix.1` 等固定 tag，发布记录同时保存完整 commit、包版本、基础镜像 digest、构建和验证日志、image ID 及推送后的 RepoDigest。发布 tag、包版本和镜像 tag 分别记录，不从可变分支名推断产物内容。
 
+正式发布时，通过 `BASE_IMAGE` 固定已核验的基础镜像 digest，将构建日志保存在仓库外，并记录构建退出码。当前 apt/pip 等依赖未全部锁定，不承诺逐字节复现。未推送的本地镜像可能没有 RepoDigest；不要用 image ID 代替 RepoDigest。
+
 RDMA 设备、memlock、GPFS 挂载和网络由运行环境提供。回读工作区的大小应结合共享内存、进程开销和 Pod 内存上限配置；现有方案未提供总在途限额、按字节分批或有界等待。
 
 本基线未纳入上游 #2126 的 GC 默认值修正。历史运行库核验建议显式设置 `MOONCAKE_OFFLOAD_CLIENT_BUFFER_GC_INTERVAL_SECONDS=1`，实际发布镜像仍需核验。#2967、#3135 依赖较新卸载状态机，未在本次导入；#3069 所需容量报告 RPC 不存在于此基线。
@@ -248,8 +264,6 @@ RDMA 设备、memlock、GPFS 挂载和网络由运行环境提供。回读工作
 ## 来源与维护约定
 
 - [官方基线说明](README.upstream.md)：保留原 README 内容。
-- [原镜像工程说明](/data/zhuyilin/git-code/survey/llm-infer-survey-private/dynamo/v5000/test-l3/output/mooncake_image/build/README.md)：现有补丁机制、原镜像身份和实验边界。该链接是内部本地路径，其他机器需使用 survey 仓库对应目录。
-- 历史材料相对 survey 仓库的位置：`dynamo/v5000/test-l3/output/mooncake_image/build/`。原 patch 的 SHA256 写入相应提交描述，源码不再依赖该目录构建。
 
 后续独立修复追加 NH 编号，补充提交沿用所属项编号；回退分配新编号并引用原项。已有编号不重排、不复用。构建与文档维护不占修复编号。
 
