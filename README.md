@@ -15,7 +15,9 @@
 
 编号标识源码修复或优化。构建、文档准备提交不编号。每个修复 commit 标题包含对应的 `[NH-0001]`，并同步更新此表和逐项说明；编号不重排、不复用。
 
-当前提交尚未导入修复。后续按历史 patch 顺序逐项提交，并加入对应记录。
+| 编号 / 上游 PR | 修改动作 | 未修改的影响 |
+| --- | --- | --- |
+| [NH-0001](#nh-0001) / [#1734](https://github.com/kvcache-ai/Mooncake/pull/1734) | 阻塞文件回读投递到工作线程 | 慢回读占满RPC线程，拖延心跳与新请求 |
 
 ## 构建方法
 
@@ -90,7 +92,23 @@ docker image inspect --format 'image_id={{.Id}} repo_digests={{json .RepoDigests
 
 以下代码路径相对本仓库。历史实验结论来自原镜像工程，不是本分支新镜像的验收结果。本次导入仅验证 patch 可应用及源码一致性，功能和性能验证仍需在目标环境执行。
 
-尚无已导入修复。
+<a id="nh-0001"></a>
+
+### NH-0001：隔离阻塞回读与RPC线程
+
+修改`mooncake-store/include/real_client.h`和`mooncake-store/src/real_client.cpp`。将offload Get及相关dummy helper改为协程，通过`coro_io::post`执行阻塞工作。
+
+```cpp
+// mooncake-store/src/real_client.cpp；关键调用，省略lambda主体。
+auto try_result = co_await coro_io::post([this, s]() {
+    // 在线程池执行原阻塞工作；s保存跨异步等待所需状态。
+    // ...
+});
+```
+
+本地按#1734语义适配0.3.10函数上下文，保留RPC请求与响应类型。异步等待期间继续持有调用数据与必要资源，避免提前销毁缓冲或锁。
+
+目标是让RPC线程继续处理心跳。持续回读与心跳压力尚未形成独立A/B结果。
 
 ## 发布记录与运行限制
 
