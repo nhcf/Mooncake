@@ -19,6 +19,7 @@
 | --- | --- | --- |
 | [NH-0001](#nh-0001) / [#1734](https://github.com/kvcache-ai/Mooncake/pull/1734) | 阻塞文件回读投递到工作线程 | 慢回读占满RPC线程，拖延心跳与新请求 |
 | [NH-0002](#nh-0002) / [#2165](https://github.com/kvcache-ai/Mooncake/pull/2165) | 单对象回读上限由4 MiB断言改为实际缓冲容量检查 | 大对象回读触发断言，Store退出 |
+| [NH-0003](#nh-0003) / [#2818](https://github.com/kvcache-ai/Mooncake/pull/2818) | 本地bucket索引提交后再发布文件副本 | master已公布副本，Store尚不可读，Get返回`INVALID_KEY` |
 
 ## 构建方法
 
@@ -130,6 +131,24 @@ if (sizes[i] < 0 || sizes[i] > config_.local_buffer_size) {
 ```
 
 上限对应单对象，并允许大小为0。该检查没有实现整批按字节切分、全局在途限额或等待空闲工作区；多个合法对象合计仍可触发`BUFFER_OVERFLOW`。
+
+<a id="nh-0003"></a>
+
+### NH-0003：先提交本地索引，再发布副本
+
+修改`mooncake-store/include/storage_backend.h`和`mooncake-store/src/storage_backend.cpp`。
+
+```text
+BucketStorageBackend卸载流程归纳：
+写bucket数据及元数据
+  → 提交本地bucket/key索引
+  → 完成回调向master发布副本
+发布失败
+  → 等待在途读取结束
+  → RollbackCommittedBucket回滚索引与文件
+```
+
+旧流程在提交索引前发布副本，Get可在两步之间到达。本补丁建立“master可见前，Store已可读”的顺序，并处理发布失败后的回滚。常规回读已通过；竞态放大和发布失败注入未专项验证。
 
 ## 发布记录与运行限制
 
