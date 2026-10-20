@@ -114,9 +114,17 @@ else
     echo "Skipping ubshmem_fabric_allocator.so (not built - likely CUDA or non-NPU build)"
 fi
 
-echo "Copying transfer_engine_bench..."
-# Copy transfer_engine_bench
-cp ${BUILD_DIR}/mooncake-transfer-engine/example/transfer_engine_bench mooncake-wheel/mooncake/
+# Production CPU builds disable examples. Only skip the benchmark when CMake
+# explicitly records that choice; a missing enabled target is still an error.
+if [ -f "${BUILD_DIR}/mooncake-transfer-engine/example/transfer_engine_bench" ]; then
+    cp "${BUILD_DIR}/mooncake-transfer-engine/example/transfer_engine_bench" mooncake-wheel/mooncake/
+elif grep -Fxq 'BUILD_EXAMPLES:BOOL=OFF' "${BUILD_DIR}/CMakeCache.txt"; then
+    rm -f mooncake-wheel/mooncake/transfer_engine_bench
+    echo "Skipping transfer_engine_bench (BUILD_EXAMPLES=OFF)"
+else
+    echo "Missing transfer_engine_bench with examples enabled" >&2
+    exit 1
+fi
 
 if [ -f "${BUILD_DIR}/mooncake-transfer-engine/src/transport/ascend_transport/hccl_transport/ascend_transport_c/libascend_transport_mem.so" ]; then
     cp ${BUILD_DIR}/mooncake-transfer-engine/src/transport/ascend_transport/hccl_transport/ascend_transport_c/libascend_transport_mem.so mooncake-wheel/mooncake/
