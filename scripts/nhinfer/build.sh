@@ -13,6 +13,7 @@ build_jobs=${BUILD_JOBS:-8}
 [[ "$build_jobs" =~ ^[1-9][0-9]*$ ]] || exit 2
 docker build \
     --network host \
+    --build-arg "GO_DOWNLOAD_BASE=${GO_DOWNLOAD_BASE:-https://mirrors.aliyun.com/golang}" \
     --build-arg "BUILD_JOBS=$build_jobs" \
     --file docker/mooncake-nhinfer.Dockerfile \
     --tag "$image_tag" \

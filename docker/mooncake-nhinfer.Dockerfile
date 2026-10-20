@@ -73,20 +73,44 @@ RUN apt-get install -y --no-install-recommends curl \
     && /usr/local/go/bin/go version | grep -F "go${go_version} "
 ENV PATH=/usr/local/go/bin:${PATH}
 
-# Git metadata is needed by dependencies.sh and source identity checks.
-# Use a normal clone with a .git directory, not a linked worktree.
+# Dependency cache only depends on the script and exact submodule gitlinks.
+# A minimal Git index lets the upstream dependency script run unchanged.
+WORKDIR /opt/nhinfer-deps
+COPY .gitmodules dependencies.sh ./
+COPY scripts/nhinfer/submodules.lock ./
+RUN git init -q \
+    && git config --global http.version HTTP/1.1 \
+    && git config --global http.lowSpeedLimit 1024 \
+    && git config --global http.lowSpeedTime 60 \
+    && if [ "${GITHUB_BASE}" != "https://github.com/" ]; then \
+        git config --global url."${GITHUB_BASE}".insteadOf "https://github.com/"; \
+    fi \
+    && while read -r revision path; do \
+        git update-index --add --cacheinfo "160000,$revision,$path"; \
+    done < submodules.lock \
+    && git submodule update --init --recursive --depth 1 --jobs 8
+ENV GITHUB_PROXY=${GITHUB_BASE%/}
+RUN bash dependencies.sh -y
+
+# Tooling is installed once; wheel packaging below runs without network access.
+COPY scripts/nhinfer/build-requirements.txt /tmp/build-requirements.txt
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ccache \
+    && python3 -m pip install -r /tmp/build-requirements.txt \
+    && rm -rf /var/lib/apt/lists/*
+ENV CCACHE_DIR=/root/.cache/ccache \
+    CCACHE_MAXSIZE=10G \
+    CCACHE_COMPILERCHECK=content
+
 WORKDIR /src/mooncake
 COPY . .
 RUN test -d .git \
     && test -z "$(git status --porcelain --untracked-files=normal)" \
-    && if [ "${GITHUB_BASE}" != "https://github.com/" ]; then \
-        git config --global url."${GITHUB_BASE}".insteadOf "https://github.com/"; \
-    fi
-
-ENV GITHUB_PROXY=${GITHUB_BASE%/}
-# 浅克隆只取主仓库锁定的子模块提交，并行下载，不跟随远端分支。
-RUN git submodule update --init --recursive --depth 1 --jobs 8 \
-    && bash dependencies.sh -y
+    && git ls-tree HEAD extern/pybind11 extern/yalantinglibs \
+       | awk '{print $3 " " $4}' > /tmp/actual-submodules.lock \
+    && diff -u scripts/nhinfer/submodules.lock /tmp/actual-submodules.lock \
+    && cp -a /opt/nhinfer-deps/extern/. extern/ \
+    && cp -a /opt/nhinfer-deps/.git/modules .git/
 
 # Capture the committed source identity before the wheel build changes files.
 RUN source_commit="$(git rev-parse HEAD)" \
@@ -98,7 +122,7 @@ RUN source_commit="$(git rev-parse HEAD)" \
         echo "source_commit=${source_commit}"; \
         echo "package_version=${package_version}"; \
         git log --reverse --format='%s' 6041a609a8c3af35e778f70db344f145c2914980..HEAD; \
-        git submodule status --recursive; \
+        cat scripts/nhinfer/submodules.lock; \
     } > /build-meta/SOURCE
 RUN python3 - <<'PYVERSION'
 import re
@@ -119,23 +143,31 @@ ARG BUILD_JOBS=8
 ARG GOPROXY=https://proxy.golang.org,direct
 ENV GOPROXY=${GOPROXY}
 # 源码变化后复用 Go 模块及编译缓存，Go 按 go.sum 校验模块内容。
-RUN --mount=type=cache,id=mooncake-nhinfer-go-mod,target=/root/go/pkg/mod,sharing=locked \
+RUN --mount=type=cache,id=mooncake-nhinfer-cxx-v0312,target=/root/.cache/ccache,sharing=locked \
+    --mount=type=cache,id=mooncake-nhinfer-go-mod,target=/root/go/pkg/mod,sharing=locked \
     --mount=type=cache,id=mooncake-nhinfer-go-build,target=/root/.cache/go-build,sharing=locked \
-    PATH="/usr/local/go/bin:${PATH}" cmake -S . -B build -G Ninja \
+    ccache --zero-stats \
+    && PATH="/usr/local/go/bin:${PATH}" cmake -S . -B build -G Ninja \
         -DUSE_HTTP=ON \
         -DUSE_ETCD=ON \
         -DUSE_CUDA=OFF \
         -DWITH_EP=OFF \
         -DSTORE_USE_ETCD=ON \
         -DBUILD_UNIT_TESTS=OFF \
+        -DBUILD_EXAMPLES=OFF \
+        -DBUILD_BENCHMARK=OFF \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
         -DCMAKE_BUILD_TYPE=Release \
         -DPython3_EXECUTABLE=/usr/bin/python3 \
-    && PATH="/usr/local/go/bin:${PATH}" cmake --build build --parallel "${BUILD_JOBS}"
+    && PATH="/usr/local/go/bin:${PATH}" cmake --build build --parallel "${BUILD_JOBS}" \
+    && ccache --show-stats \
+    && ccache --show-stats > /build-meta/ccache-stats.txt
 
 # 生成与官方 non-CUDA wheel 相同布局的修复产物。local version 让运行时可以直接
 # 区分补丁包和未修改的 0.3.12.post1，Store 内部 RPC 版本仍保持 0.3.12 基线。
-# pip 源由 ENV PIP_INDEX_URL 统一控制，build_wheel.sh 内部的 pip 调用同样生效。
-RUN PYTHON_VERSION=3.10 OUTPUT_DIR=dist ./scripts/build_wheel.sh \
+# 打包工具已固定安装；禁网执行以阻止隐式下载及隔离环境重复安装。
+RUN --network=none WHEEL_OFFLINE_BUILD=1 PYTHON_VERSION=3.10 OUTPUT_DIR=dist ./scripts/build_wheel.sh \
     && git diff --binary > /build-meta/build-generated.diff \
     && cp mooncake-common/etcd/go.mod /build-meta/etcd-go.mod \
     && cp mooncake-common/etcd/go.sum /build-meta/etcd-go.sum \

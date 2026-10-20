@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: Copyright 2026 (C) Zhejiang Lab. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 # Script to build the mooncake wheel package
 # Usage: ./scripts/build_wheel.sh [python_version] [output_dir]
 # Example: ./scripts/build_wheel.sh 3.10 dist-3.10
@@ -266,7 +268,9 @@ rm -rf ${OUTPUT_DIR}/
 mkdir -p ${OUTPUT_DIR}
 
 echo "Installing required build packages"
-if [ "$NPU_BUILD" = "1" ]; then
+if [ "${WHEEL_OFFLINE_BUILD:-0}" = "1" ]; then
+    python${PYTHON_VERSION} -c "import build, setuptools, wheel, auditwheel"
+elif [ "$NPU_BUILD" = "1" ]; then
     PYTHON_CMD="python${PYTHON_VERSION}"
     if ! command -v "$PYTHON_CMD" &>/dev/null; then
         echo "Error: $PYTHON_CMD not found for NPU wheel build"
@@ -355,7 +359,7 @@ echo "Detected glibc version: $GLIBC_VERSION"
 echo "Using platform tag: $PLATFORM_TAG"
 
 echo "Repairing wheel with auditwheel for platform: $PLATFORM_TAG"
-if [ "$NPU_BUILD" = "1" ]; then
+if [ "$NPU_BUILD" = "1" ] || [ "${WHEEL_OFFLINE_BUILD:-0}" = "1" ]; then
     python${PYTHON_VERSION} -m build --wheel --no-isolation --outdir ${OUTPUT_DIR}
     AUDITWHEEL_CMD="python${PYTHON_VERSION} -m auditwheel"
 else
