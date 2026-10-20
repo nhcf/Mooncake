@@ -61,7 +61,7 @@ POD_IP=10.0.0.2 MOONCAKE_MASTER=master-host:17789 STORE_ID=shared-0 \
 | 六补丁独立应用，与本分支六个业务文件逐字节比较 | 通过，包含新文件 `uring_submit.h` |
 | 源码hash、Git差异空白检查、Python及Shell语法 | 通过 |
 | 实际提交辅助函数CPU故障注入 | 7项通过：空队列、部分提交、瞬态重试、重试耗尽、永久失败、零返回和异常计数 |
-| 当前分支完整Docker构建及镜像CPU门禁 | 未执行：本机 `/data` 仅余约7.8GiB，先完成源码迁入与轻量验证 |
+| 当前分支完整Docker构建及镜像CPU门禁 | 通过：被测源码 `2bc3a83cd61f`；身份、包版本、导入、ELF、CLI及64KiB/20MiB CPU/TCP Put/Get/Remove均通过 |
 | 新产物跨节点RDMA/GPFS、厂商批量接口、恢复及性能 | 未执行 |
 
 复验命令在仓库根目录执行；C++测试只检查提交辅助函数，不调用内核io_uring：
@@ -74,4 +74,23 @@ g++ -std=c++17 -Wall -Wextra -Werror -I. \
 "$check_dir/uring-submit-test"
 ```
 
-既有已推送镜像 `10.200.53.208/model_test/mooncake:0.3.12.post1-cpu-nhinfer-fix.1` 属于镜像工程产物。仓库化构建采用新的commit包版本，后续发布使用新标签，并记录源码commit、包版本、image ID、RepoDigest及本轮验证结果。本地迁入完成后仍需完整编译与镜像门禁，再开展实际RDMA、GPFS文件回读、短读、重复桶和master恢复验证。
+既有已推送镜像 `10.200.53.208/model_test/mooncake:0.3.12.post1-cpu-nhinfer-fix.1` 属于镜像工程产物。仓库化构建采用新的commit包版本，后续发布使用新标签，并记录源码commit、包版本、image ID、RepoDigest及本轮验证结果。本轮完成完整编译与镜像CPU门禁；实际RDMA、GPFS文件回读、短读、重复桶和master恢复验证仍待执行。
+
+## 2026-10-20本地镜像构建记录
+
+- 被测源码：`2bc3a83cd61f1ee396f1a8a9116a6132e625894c`；本节回填是后续文档提交。
+- 本地镜像：`local/mooncake:0.3.12.post1-cpu-nhinfer-g2bc3a83cd61f`。
+- 包版本：`0.3.12.post1+nhinfer.g2bc3a83cd61f`。
+- image ID：`sha256:3ae583a8086cbfab830b4f43201f2a4e24de0c5d0501aedb680a14b4d727dfda`。
+- [构建结果及日志](/data/zhuyilin/mooncake-build-results/v0312-20261020-155505/result.json)：退出码0，未推送、未部署。目录同时保存输入hash、镜像inspect、源码及Go构建元数据。
+
+磁盘空间恢复后执行完整构建。首轮因Go下载慢主动停止，日志保留在 `/data/zhuyilin/mooncake-build-results/v0312-20261020-154703/`；第二轮通过已有参数切换下载源：
+
+```bash
+bash scripts/nhinfer/build.sh \
+    --build-arg GO_DOWNLOAD_BASE=https://mirrors.aliyun.com/golang
+```
+
+CMake配置及编译用时925.5秒，wheel及元数据阶段236.4秒。首次系统依赖安装341.3秒；重试时该层命中缓存。Go安装187.4秒，子模块及依赖脚本156.0秒。历史镜像工程冷编译约933秒，最终复验的编译层命中缓存。
+
+后续加速方向是独立依赖层、隔离文档/Git元数据、持久C++编译缓存、关闭examples/benchmarks和预装固定打包工具。本轮尚未实施这些优化；效果需通过相同输入重建、仅修改文档及单个C++文件三类对照验证。
