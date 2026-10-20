@@ -1,0 +1,51 @@
+{
+  "base_ref": "v0.3.12.post1",
+  "base_commit": "6041a609a8c3af35e778f70db344f145c2914980",
+  "source": "CPU image six production patches, 20261013",
+  "patches": [
+    {
+      "file": "0001-pr3479.patch",
+      "pr": "3479",
+      "upstream_commit": "36cb450a647533cc79f2ae0ae40a6ebdadc5d8bf",
+      "sha256": "f187d45e449653c893cf1478d05ffaa6aaf23610ea19e6ce322333393d5c8256"
+    },
+    {
+      "file": "0002-pr3246.patch",
+      "pr": "3246",
+      "upstream_commit": "45f805a2a869a387ee516cc23ad48afd4432ead9",
+      "sha256": "d43ae380bd8963fd549bfe7b7659d74a61254d1e32a451865946722c52498c37"
+    },
+    {
+      "file": "0003-pr3073.patch",
+      "pr": "3073",
+      "upstream_commit": "a16e042b8b1f7c130c9c0d5ab0e8b16c37d1e10f",
+      "sha256": "0a43533ae533f872989922958c0980471debb94f9934a2916632a9b179ac3a2f"
+    },
+    {
+      "file": "0004-pr3488.patch",
+      "pr": "3488",
+      "upstream_commit": "f54337824d93bb62299dfa0c485ea8a094634fc9",
+      "sha256": "d60811b0e28d08db228c92a927240c936b53b6b35f9601f8d87dd1e533a9ec0b"
+    },
+    {
+      "file": "0005-pr3069.patch",
+      "pr": "3069",
+      "upstream_commit": "483193151099933d16d7d87f40db62c55c7e7ba5",
+      "sha256": "a7938a3916cbf7c0c02dedf4ec22f41c4739b92485c8ccab47aa0a9a3e5cde16"
+    },
+    {
+      "file": "0006-pr2967.patch",
+      "pr": "2967",
+      "upstream_commit": "a4e67597f55369ce5083096b45c40858441e21a4",
+      "sha256": "1f7d108380be99f63e12ca55bd0377bc65b9fc23b605160a4f5c796a819cfa3d"
+    }
+  ],
+  "source_files_sha256": {
+    "mooncake-store/include/file_interface.h": "6655f46303a2a23f305c3678a744dc05953e390f72320a5dcecc9282005c5dce",
+    "mooncake-store/include/file_storage.h": "a4583e94a7c758e24a4a817526905c75beccf4254a6612666ced612f23252b56",
+    "mooncake-store/src/file_storage.cpp": "eba53a8d2f33d20894abfecdb381a46d7107eeb14c98f0c6a8eaf40f19cfc7e3",
+    "mooncake-store/src/storage_backend.cpp": "a2814498b2645e15be9f270bb9fe4476654ea3448a33471938ed8e78ef653483",
+    "mooncake-store/src/uring_file.cpp": "e95b714d5cf2c69a894b71b513ad70f33303cc94c1386fdb77febc23dd39edf8",
+    "mooncake-store/src/uring_submit.h": "a16ee0a7d9eb7a8a08ff12961f557d56e485a4aecffdca0c6a59c2163229e6fd"
+  }
+}

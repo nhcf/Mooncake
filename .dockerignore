@@ -1,2 +1,11 @@
-**/.dockerignore
-**/*.Dockerfile
+# Keep .git and tracked build recipes: nhinfer verifies HEAD and uses submodules.
+# The final runtime image does not contain Git metadata or source.
+/build
+/build_ofed4
+/dist
+/mooncake-wheel/build
+/mooncake-wheel/dist
+/mooncake-wheel/repaired_wheels_*
+/.venv
+/.cache
+/.vscode
