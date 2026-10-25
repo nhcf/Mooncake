@@ -27,7 +27,7 @@
 | 官方基线 | [v0.3.12.post1](https://github.com/kvcache-ai/Mooncake/tree/v0.3.12.post1)，commit `6041a609a8c3af35e778f70db344f145c2914980` |
 | 构建入口 | [build.sh](scripts/nhinfer/build.sh)、[Dockerfile](docker/mooncake-nhinfer.Dockerfile) |
 | 运行能力 | non-CUDA、HTTP、etcd、Store etcd；Linux amd64、Python 3.10 |
-| 验证状态 | 六补丁仓库构建已通过；八补丁源码已与已发布镜像工程逐文件核验，当前提交构建结果见下文；HA未验收 |
+| 验证状态 | 八补丁源码一致性、仓库完整构建、CPU写读、尾桶及LRU/FIFO回归通过；本仓库重建镜像的RDMA/GPFS及HA未执行 |
 
 `v0.3.10.post2-nhinfer-fix` 继续作为独立维护线。迁移到本版本时使用独立池地址、Store 身份和文件目录，并验证实际 Client 与服务端的接口兼容性。
 
@@ -252,3 +252,14 @@ python3 scripts/nhinfer/tests/run_carry_regression.py <镜像标签>
 ```
 
 当前源码构建仍使用commit派生的local标签，避免覆盖正式fix.2产物。更新Git分支、构建镜像、推送镜像和切换线上服务分别记录。
+
+### 仓库构建验收
+
+提交`b5bf0952f851`完整构建通过，包版本`0.3.12.post1+nhinfer.gb5bf0952f851`，本地镜像`local/mooncake:0.3.12.post1-cpu-nhinfer-gb5bf0952f851`，image ID为`sha256:b53794acc0951c0ca7186464c8024fb4517fb42d1b8c821d359a99f550803f04`。
+
+- 八项补丁覆盖的八个文件与固定基线独立应用结果逐字节一致，包含新增文件。
+- 镜像源码身份、包导入、ELF依赖及Master CLI通过；64 KiB和20 MiB对象CPU/TCP写入、逐字节读取及删除通过。
+- 尾桶回归两次均100/100对象保留且内容一致；LRU/FIFO回归均保留45/45个新对象，触发旧对象驱逐且无内容错误。
+- io_uring提交辅助函数7项CPU故障注入通过。pre-commit工具未安装，已执行git diff --check及Python语法检查。
+
+以上为本仓库提交的本地构建与CPU验收；该commit标签未推送、未部署，也未执行RDMA/GPFS或HA复验。正式fix.2镜像的线上结果仍按上节独立记录。
