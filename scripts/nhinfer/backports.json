@@ -1,7 +1,7 @@
 {
   "base_ref": "v0.3.12.post1",
   "base_commit": "6041a609a8c3af35e778f70db344f145c2914980",
-  "source": "CPU image six production patches, 20261013",
+  "source": "CPU image eight-patch set, 20261025; formal tag 0.3.12.post1-cpu-nhinfer-fix.2",
   "patches": [
     {
       "file": "0001-pr3479.patch",
@@ -38,14 +38,30 @@
       "pr": "2967",
       "upstream_commit": "a4e67597f55369ce5083096b45c40858441e21a4",
       "sha256": "1f7d108380be99f63e12ca55bd0377bc65b9fc23b605160a4f5c796a819cfa3d"
+    },
+    {
+      "file": "0007-pr3009.patch",
+      "pr": "3009",
+      "upstream_commit": "88a5b5a16aa44edb1e6a0f8f68514bada3b820ef",
+      "sha256": "5a15f0c34879ceb876c146f5c7a5ad2a49ea9db6381d6e1af0e15edd1057efcd",
+      "scope": "production-only adaptation"
+    },
+    {
+      "file": "0008-pr2985.patch",
+      "pr": "2985",
+      "upstream_commit": "4671e2963115519380142c0212328b9f93c8d4d7",
+      "sha256": "6668f22fae21ea9c245055d97c521c7884f898497bd50b1872861090cc2ec9f5",
+      "scope": "complete PR-head diff including tests"
     }
   ],
   "source_files_sha256": {
     "mooncake-store/include/file_interface.h": "6655f46303a2a23f305c3678a744dc05953e390f72320a5dcecc9282005c5dce",
-    "mooncake-store/include/file_storage.h": "a4583e94a7c758e24a4a817526905c75beccf4254a6612666ced612f23252b56",
-    "mooncake-store/src/file_storage.cpp": "eba53a8d2f33d20894abfecdb381a46d7107eeb14c98f0c6a8eaf40f19cfc7e3",
-    "mooncake-store/src/storage_backend.cpp": "a2814498b2645e15be9f270bb9fe4476654ea3448a33471938ed8e78ef653483",
+    "mooncake-store/include/file_storage.h": "e5a0de471b9d58a1a76dbef94dab7f41610e103c2077849b3a74b65834821fa3",
+    "mooncake-store/src/file_storage.cpp": "a88600acdcebe687a756d2a6d126e77db4eac6204f85ba1a897114db46ed5a1a",
+    "mooncake-store/src/storage_backend.cpp": "30e2c3321e57179c299ed5f163a2897e04ff150bcd7d4a26a5b14d5ed4edd0b0",
     "mooncake-store/src/uring_file.cpp": "e95b714d5cf2c69a894b71b513ad70f33303cc94c1386fdb77febc23dd39edf8",
-    "mooncake-store/src/uring_submit.h": "a16ee0a7d9eb7a8a08ff12961f557d56e485a4aecffdca0c6a59c2163229e6fd"
+    "mooncake-store/src/uring_submit.h": "a16ee0a7d9eb7a8a08ff12961f557d56e485a4aecffdca0c6a59c2163229e6fd",
+    "mooncake-store/include/storage_backend.h": "13f7b490b04ff1ecfbb8f0b23f22cfcfc73362a70bb16b9c2418e2ece525b830",
+    "mooncake-store/tests/storage_backend_test.cpp": "abc3f84c268852d839b7aed537d0aded2c6c85d27372d78c458006206738590e"
   }
 }

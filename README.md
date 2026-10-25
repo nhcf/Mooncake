@@ -27,7 +27,7 @@
 | 官方基线 | [v0.3.12.post1](https://github.com/kvcache-ai/Mooncake/tree/v0.3.12.post1)，commit `6041a609a8c3af35e778f70db344f145c2914980` |
 | 构建入口 | [build.sh](scripts/nhinfer/build.sh)、[Dockerfile](docker/mooncake-nhinfer.Dockerfile) |
 | 运行能力 | non-CUDA、HTTP、etcd、Store etcd；Linux amd64、Python 3.10 |
-| 验证状态 | 完整镜像构建及 CPU/TCP 验证通过；跨节点 RDMA、GPFS、恢复和 HA 路径待目标环境验收 |
+| 验证状态 | 六补丁仓库构建已通过；八补丁源码已与已发布镜像工程逐文件核验，当前提交构建结果见下文；HA未验收 |
 
 `v0.3.10.post2-nhinfer-fix` 继续作为独立维护线。迁移到本版本时使用独立池地址、Store 身份和文件目录，并验证实际 Client 与服务端的接口兼容性。
 
@@ -43,12 +43,14 @@ NH 编号标识本维护分支的独立修复，各版本分支分别编号。�
 | [NH-0004](#nh-0004) / [#3488](https://github.com/kvcache-ai/Mooncake/pull/3488) | 同 bucket 多 key 批量提交 io_uring 读取 | 逐 key 提交并等待，增加回读开销 |
 | [NH-0005](#nh-0005) / [#3069](https://github.com/kvcache-ai/Mooncake/pull/3069) | master 恢复后重新报告配置的 SSD 容量 | master 丢失文件容量统计 |
 | [NH-0006](#nh-0006) / [#2967](https://github.com/kvcache-ai/Mooncake/pull/2967) | 按 bucket 隔离软错误并统一回报失败任务 | 局部失败中断整轮卸载，任务及副本引用释放延迟 |
+| [NH-0007](#nh-0007) / [#3009](https://github.com/kvcache-ai/Mooncake/pull/3009) | 保留延期尾桶任务及跨轮任务身份 | 尾桶封装时找不到原任务，对象无法进入文件层 |
+| [NH-0008](#nh-0008) / [#2985](https://github.com/kvcache-ai/Mooncake/pull/2985) | 新桶写入完成时登记LRU时间，并维护双向索引 | 新桶首次读取前被当作最旧对象提前驱逐 |
 
 官方基线已包含 #1734、#2165、#2818、#2077 和 #2126 对应修改。#3135 尚未纳入，需单独适配当前卸载实现。
 
 ## 构建方法
 
-需要 Docker BuildKit、Python 3 和依赖下载网络。使用普通 Git clone，保留 `.git` 目录；源码修改先提交，构建脚本会检查工作区并校验六个补丁产物文件。
+需要 Docker BuildKit、Python 3 和依赖下载网络。使用普通 Git clone，保留 `.git` 目录；源码修改先提交，构建脚本会检查工作区并校验八项补丁覆盖的全部产物文件。
 
 ```bash
 git clone --branch v0.3.12.post1-nhinfer-fix https://github.com/nhcf/Mooncake.git
@@ -221,3 +223,32 @@ git log --oneline --fixed-strings --grep='[NH-0001]'
 ```
 
 官方项目说明保留在 [README.upstream.md](README.upstream.md)。贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 2026-10-25八补丁维护与发布
+
+本分支新增NH-0007、NH-0008，生产源码及测试与正式镜像工程八项补丁在固定基线独立应用后的文件逐字节一致。NH-0007采用四个生产文件回移，NH-0008包含两个生产文件及storage_backend_test.cpp。原有六项补丁与构建缓存优化保留。
+
+### NH-0007：保留延期尾桶卸载任务
+<a id="nh-0007"></a>
+
+上游PR #3009固定head为`88a5b5a16aa44edb1e6a0f8f68514bada3b820ef`，合入commit为`20196fc6f77aa5a241cc52a30f64b09d0c91c042`。后端将未满桶的key延至后续轮次时，同时保留其offload task；后续封桶仍能找到对应任务。跳过对象与延期对象分别处理，避免提前NACK释放任务后形成无任务的缓存对象。
+
+### NH-0008：新桶按准入时间进入LRU
+<a id="nh-0008"></a>
+
+采用PR #2985的固定head `4671e2963115519380142c0212328b9f93c8d4d7`，不将PR-head回移表述为官方已合入。成功写入的新桶以当前steady-clock时间加入LRU，删除、恢复和回滚同步维护时间到bucket及bucket到时间索引。避免新桶以时间0加入后，在首次读取前被优先驱逐。
+
+### 已发布产物与验证范围
+
+正式镜像为`10.200.53.208/model_test/zyl-mooncake:0.3.12.post1-cpu-nhinfer-fix.2`，RepoDigest为`sha256:4a1b5310c376f9e1b83b12f97df6b4169f7ab4703710cd23a741a1ba2d59217e`，image ID为`sha256:c710b78a8820d9a97447f6c3e2983034dfb6de30a81f52e973d61963ea71fd05`。该产物来自官方基线加八补丁的镜像工程，正式标签与原20261025日期标签指向同一产物；不是本仓库新提交重建的镜像。
+
+镜像工程完整构建、84项存储单测、LRU/FIFO回归通过；新写入对象45/45保留，旧七补丁对照为23/45。尾桶回归两次100/100逐字节一致，旧文件24/24恢复一致。prod-mc0312p1-02的RDMA/GPFS探针与Kimi 80会话×10轮通过，800/800成功，末轮输入Token命中率88.89%。模型结果还依赖Kimi引擎修复和运行配置，不能归因于服务端单项补丁。
+
+本仓库新增隔离CPU回归入口，输出写入临时目录，可通过RESULT_ROOT指定已有结果父目录：
+
+```bash
+python3 scripts/nhinfer/tests/run_lru_regression.py <镜像标签>
+python3 scripts/nhinfer/tests/run_carry_regression.py <镜像标签>
+```
+
+当前源码构建仍使用commit派生的local标签，避免覆盖正式fix.2产物。更新Git分支、构建镜像、推送镜像和切换线上服务分别记录。
