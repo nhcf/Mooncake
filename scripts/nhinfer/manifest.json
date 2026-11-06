@@ -1,0 +1,10 @@
+{
+  "package": "mooncake-transfer-engine-non-cuda",
+  "version": "0.3.7.post2",
+  "wheel": "mooncake_transfer_engine_non_cuda-0.3.7.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux_2_35_x86_64.whl",
+  "sha256": "0d04b01c2ff86f2d72630944c576c6bc82d204f8a11ff2527c5ea7063557be2f",
+  "url": "https://files.pythonhosted.org/packages/84/5f/92cb95fd7327501a37ea604b19f131da04ed6123c05c6fdd94f5fe0e8a81/mooncake_transfer_engine_non_cuda-0.3.7.post2-cp310-cp310-manylinux_2_17_x86_64.manylinux_2_35_x86_64.whl",
+  "official_source_commit": "b6a841dc78c707ec655a563453277d969fb8f38d",
+  "base_image": "ubuntu:22.04@sha256:0e0a0fc6d18feda9db1590da249ac93e8d5abfea8f4c3c0c849ce512b5ef8982",
+  "patches": []
+}
