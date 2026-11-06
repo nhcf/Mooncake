@@ -1,0 +1,20 @@
+{
+  "base_ref": "v0.3.13",
+  "base_commit": "e5598b0992cc258b06d22f24d875480e8931a28e",
+  "patches": [
+    {
+      "id": "NH-0001",
+      "pr": "3009",
+      "upstream_commit": "88a5b5a16aa44edb1e6a0f8f68514bada3b820ef",
+      "merge_commit": "20196fc6f77aa5a241cc52a30f64b09d0c91c042",
+      "sha256": "5a15f0c34879ceb876c146f5c7a5ad2a49ea9db6381d6e1af0e15edd1057efcd",
+      "scope": "Adapted production code; upstream tests excluded"
+    }
+  ],
+  "source_files_sha256": {
+    "mooncake-store/include/file_storage.h": "643fdfec1424d2f9219d3a9e400ef26f57175f63531aa1ce03838649b9110b19",
+    "mooncake-store/include/storage_backend.h": "bc0668a113c4b4692fd1735c5f4f801bce76baf90429f1e3e8440dd85e76e73d",
+    "mooncake-store/src/file_storage.cpp": "9a864b263a98508ef46b14206c90b036fbeab03519006ee47c966954cae0b5bc",
+    "mooncake-store/src/storage_backend.cpp": "55804f5aee52dc4b25604cd34681f556f301a5ecaa0b42eedee1fb0a8b172c94"
+  }
+}

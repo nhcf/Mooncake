@@ -1,2 +1,5 @@
-**/.dockerignore
-**/*.Dockerfile
+build/
+results/
+**/__pycache__/
+**/*.pyc
+mooncake-wheel/dist/

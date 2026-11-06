@@ -209,3 +209,6 @@ core_*
 # MacOS
 .DS_Store
 .envrc
+
+# Downloaded nhinfer build inputs; verified before each build.
+/vendor/
