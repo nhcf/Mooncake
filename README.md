@@ -101,6 +101,12 @@ bash scripts/nhinfer/run-smoke.sh IMAGE_TAG
 
 既有候选于 2026-10-27 通过完整构建、CPU/TCP 和上述文件回归，采用相同生产补丁。本分支构建身份重新生成，检查结果单独记录。跨节点 RDMA、GPFS、恢复、HA 和模型联调待目标环境验收。
 
+### 仓库构建验证（2026-11-06）
+
+被测提交 `c785ce30fc0c4d2045c67add1d857a83c03c3d76` 完整构建通过，包版本为 `0.3.13+nhinfer.gc785ce30fc0c`，image ID 为 `sha256:4b66ee7470f6da6a6d6e352a70c99a31383ca6ebf7185f8eae41b1f7a5488220`。源码身份、包版本、原生依赖、master CLI 及 64 KiB/20 MiB CPU/TCP 写读删除通过。
+
+同一镜像的跨心跳文件回归通过：100 个 1 MiB 对象全部 Put 成功，缺失数 0、内容错误数 0，生成 12 个文件。测试使用隔离 TCP、本地 POSIX 文件、16 MiB 桶、FIFO 和 `offload_on_evict=false`。官方基线加原 patch 的四个生产文件与维护分支逐字节一致。后续文档提交的镜像需按实际 commit 重建；本轮未推送镜像或部署服务。
+
 ## 发布与维护约定
 
 原版分支保持官方 tag 的提交；维护分支从同版本基线追加修改，独立修复使用 `[NH-0001]` 等编号，构建和文档维护不占编号。发布使用唯一镜像标签，记录 Git commit、包版本、基础镜像 digest、验证范围、image ID 和推送后的 RepoDigest。
